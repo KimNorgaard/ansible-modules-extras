@@ -153,7 +153,7 @@ class SteelAppNode(object):
 
         try:
             response = self._client.get(self._url, timeout=self.timeout)
-        except requests.exceptions.ConnectionError as e:
+        except requests.exceptions.ConnectionError, e:
             self.module.fail_json(
                 msg="Unable to connect to {0}: {1}".format(self._url, str(e)))
 
@@ -162,7 +162,7 @@ class SteelAppNode(object):
 
         try:
             self.pool_data = json.loads(response.text)
-        except Exception as e:
+        except Exception, e:
             self.module.fail_json(msg=str(e))
 
         if 'error_id' in self.pool_data:
@@ -315,7 +315,7 @@ def main():
 
         module.exit_json(changed=steelapp_node.changed, msg=steelapp_node.msg,
                          data=steelapp_node.pool_data)
-    except Exception as e:
+    except Exception, e:
         module.fail_json(msg=str(e))
 
 
