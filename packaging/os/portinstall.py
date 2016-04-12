@@ -43,7 +43,7 @@ options:
         choices: [ 'yes', 'no' ]
         required: false
         default: yes
-author: berenddeboer
+author: "berenddeboer (@berenddeboer)"
 '''
 
 EXAMPLES = '''
@@ -58,7 +58,6 @@ EXAMPLES = '''
 '''
 
 
-import json
 import shlex
 import os
 import sys

@@ -20,7 +20,7 @@
 DOCUMENTATION = '''
 ---
 module: ovirt
-author: Vincent Van der Kussen
+author: "Vincent Van der Kussen (@vincentvdk)"
 short_description: oVirt/RHEV platform management
 description:
     - allows you to create new instances, either from scratch or an image, in addition to deleting or stopping instances on the oVirt/RHEV platform
@@ -152,67 +152,68 @@ options:
     aliases: []
     choices: ['present', 'absent', 'shutdown', 'started', 'restarted']
 
-requirements: [ "ovirt-engine-sdk" ]
+requirements:
+  - "python >= 2.6"
+  - "ovirt-engine-sdk-python"
 '''
 EXAMPLES = '''
 # Basic example provisioning from image.
 
-action: ovirt >
-    user=admin@internal 
-    url=https://ovirt.example.com 
-    instance_name=ansiblevm04 
-    password=secret 
-    image=centos_64 
-    zone=cluster01 
-    resource_type=template"
+ovirt:
+    user: admin@internal
+    url: https://ovirt.example.com
+    instance_name: ansiblevm04
+    password: secret
+    image: centos_64
+    zone: cluster01
+    resource_type: template"
 
 # Full example to create new instance from scratch
-action: ovirt > 
-    instance_name=testansible 
-    resource_type=new 
-    instance_type=server 
-    user=admin@internal 
-    password=secret 
-    url=https://ovirt.example.com 
-    instance_disksize=10 
-    zone=cluster01 
-    region=datacenter1 
-    instance_cpus=1 
-    instance_nic=nic1 
-    instance_network=rhevm 
-    instance_mem=1000 
-    disk_alloc=thin 
-    sdomain=FIBER01 
-    instance_cores=1 
-    instance_os=rhel_6x64 
-    disk_int=virtio"
+ovirt:
+    instance_name: testansible
+    resource_type: new
+    instance_type: server
+    user: admin@internal
+    password: secret
+    url: https://ovirt.example.com
+    instance_disksize: 10
+    zone: cluster01
+    region: datacenter1
+    instance_cpus: 1
+    instance_nic: nic1
+    instance_network: rhevm
+    instance_mem: 1000
+    disk_alloc: thin
+    sdomain: FIBER01
+    instance_cores: 1
+    instance_os: rhel_6x64
+    disk_int: virtio"
 
 # stopping an instance
-action: ovirt >
-    instance_name=testansible
-    state=stopped
-    user=admin@internal
-    password=secret
-    url=https://ovirt.example.com
+ovirt:
+    instance_name: testansible
+    state: stopped
+    user: admin@internal
+    password: secret
+    url: https://ovirt.example.com
 
 # starting an instance
-action: ovirt >
-    instance_name=testansible 
-    state=started 
-    user=admin@internal 
-    password=secret 
-    url=https://ovirt.example.com
+ovirt:
+    instance_name: testansible
+    state: started
+    user: admin@internal
+    password: secret
+    url: https://ovirt.example.com
 
 
 '''
-import sys
 
 try:
     from ovirtsdk.api import API
     from ovirtsdk.xml import params
+    HAS_OVIRTSDK = True
 except ImportError:
-    print "failed=True msg='ovirtsdk required for this module'"
-    sys.exit(1)
+    HAS_OVIRTSDK = False
 
 # ------------------------------------------------------------------- #
 # create connection with API
@@ -222,8 +223,7 @@ def conn(url, user, password):
     try:
         value = api.test()
     except:
-        print "error connecting to the oVirt API"
-        sys.exit(1)
+        raise Exception("error connecting to the oVirt API")
     return api
 
 # ------------------------------------------------------------------- #
@@ -251,17 +251,16 @@ def create_vm(conn, vmtype, vmname, zone, vmdisk_size, vmcpus, vmnic, vmnetwork,
     try:
         conn.vms.add(vmparams)
     except:
-        print "Error creating VM with specified parameters"
-        sys.exit(1)
+        raise Exception("Error creating VM with specified parameters")
     vm = conn.vms.get(name=vmname)
     try:
         vm.disks.add(vmdisk)
     except:
-        print "Error attaching disk"
+        raise Exception("Error attaching disk")
     try:
         vm.nics.add(nic_net1)
     except:
-        print "Error adding nic"
+        raise Exception("Error adding nic")
 
 
 # create an instance from a template
@@ -270,8 +269,7 @@ def create_vm_template(conn, vmname, image, zone):
     try:
         conn.vms.add(vmparams)
     except:
-        print 'error adding template %s' % image
-        sys.exit(1)
+        raise Exception('error adding template %s' % image)
 
 
 # start instance
@@ -354,6 +352,9 @@ def main():
         )
     )
 
+    if not HAS_OVIRTSDK:
+        module.fail_json(msg='ovirtsdk required for this module')
+
     state         = module.params['state']
     user          = module.params['user']
     url           = module.params['url']
@@ -375,16 +376,25 @@ def main():
     sdomain       = module.params['sdomain']            # storage domain to store disk on
     region        = module.params['region']             # oVirt Datacenter
     #initialize connection
-    c = conn(url+"/api", user, password)
+    try:
+        c = conn(url+"/api", user, password)
+    except Exception, e:
+        module.fail_json(msg='%s' % e)
 
     if state == 'present':
         if get_vm(c, vmname) == "empty":
             if resource_type == 'template':
-                create_vm_template(c, vmname, image, zone)
+                try:
+                    create_vm_template(c, vmname, image, zone)
+                except Exception, e:
+                    module.fail_json(msg='%s' % e)
                 module.exit_json(changed=True, msg="deployed VM %s from template %s"  % (vmname,image))
             elif resource_type == 'new':
                 # FIXME: refactor, use keyword args.
-                create_vm(c, vmtype, vmname, zone, vmdisk_size, vmcpus, vmnic, vmnetwork, vmmem, vmdisk_alloc, sdomain, vmcores, vmos, vmdisk_int)
+                try:
+                    create_vm(c, vmtype, vmname, zone, vmdisk_size, vmcpus, vmnic, vmnetwork, vmmem, vmdisk_alloc, sdomain, vmcores, vmos, vmdisk_int)
+                except Exception, e:
+                    module.fail_json(msg='%s' % e)
                 module.exit_json(changed=True, msg="deployed VM %s from scratch"  % vmname)
             else:
                 module.exit_json(changed=False, msg="You did not specify a resource type")

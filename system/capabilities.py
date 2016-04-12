@@ -50,7 +50,7 @@ notes:
       and flags to compare, so you will want to ensure that your capabilities
       argument matches the final capabilities.
 requirements: []
-author: Nate Coraor <nate@bx.psu.edu>
+author: "Nate Coraor (@natefoo)"
 '''
 
 EXAMPLES = '''
@@ -180,7 +180,6 @@ def main():
 
     CapabilitiesModule(module)
 
-    sys.exit(0)
 
 # import module snippets
 from ansible.module_utils.basic import *

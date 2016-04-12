@@ -76,29 +76,29 @@ options:
     description:
       - Do not add the packages to the world file (--oneshot)
     required: false
-    default: null
-    choices: [ "yes" ]
+    default: False
+    choices: [ "yes", "no" ]
 
   noreplace:
     description:
       - Do not re-emerge installed packages (--noreplace)
     required: false
-    default: null
-    choices: [ "yes" ]
+    default: False
+    choices: [ "yes", "no" ]
 
   nodeps:
     description:
       - Only merge packages but not their dependencies (--nodeps)
     required: false
-    default: null
-    choices: [ "yes" ]
+    default: False
+    choices: [ "yes", "no" ]
 
   onlydeps:
     description:
       - Only merge packages' dependencies but not the packages (--onlydeps)
     required: false
-    default: null
-    choices: [ "yes" ]
+    default: False
+    choices: [ "yes", "no" ]
 
   depclean:
     description:
@@ -106,22 +106,22 @@ options:
       - If no package is specified, clean up the world's dependencies
       - Otherwise, --depclean serves as a dependency aware version of --unmerge
     required: false
-    default: null
-    choices: [ "yes" ]
+    default: False
+    choices: [ "yes", "no" ]
 
   quiet:
     description:
       - Run emerge in quiet mode (--quiet)
     required: false
-    default: null
-    choices: [ "yes" ]
+    default: False
+    choices: [ "yes", "no" ]
 
   verbose:
     description:
       - Run emerge in verbose mode (--verbose)
     required: false
-    default: null
-    choices: [ "yes" ]
+    default: False
+    choices: [ "yes", "no" ]
 
   sync:
     description:
@@ -130,10 +130,26 @@ options:
       - If web, perform "emerge-webrsync"
     required: false
     default: null
-    choices: [ "yes", "web" ]
+    choices: [ "yes", "web", "no" ]
+
+  getbinpkg:
+    description:
+      - Prefer packages specified at PORTAGE_BINHOST in make.conf
+    required: false
+    default: False
+    choices: [ "yes", "no" ]
+
+  usepkgonly:
+    description:
+      - Merge only binaries (no compiling). This sets getbinpkg=yes.
+    required: false
+    default: False
+    choices: [ "yes", "no" ]
 
 requirements: [ gentoolkit ]
-author: Yap Sok Ann
+author: 
+    - "Yap Sok Ann (@sayap)"
+    - "Andrew Udvare"
 notes:  []
 '''
 
@@ -146,6 +162,12 @@ EXAMPLES = '''
 
 # Update package foo to the "best" version
 - portage: package=foo update=yes
+
+# Install package foo using PORTAGE_BINHOST setup
+- portage: package=foo getbinpkg=yes
+
+# Re-install world from binary packages only and do not allow any compiling
+- portage: package=@world usepkgonly=yes
 
 # Sync repositories and update world
 - portage: package=@world update=yes deep=yes sync=yes
@@ -160,6 +182,7 @@ EXAMPLES = '''
 
 import os
 import pipes
+import re
 
 
 def query_package(module, package, action):
@@ -210,7 +233,7 @@ def sync_repositories(module, webrsync=False):
         webrsync_path = module.get_bin_path('emerge-webrsync', required=True)
         cmd = '%s --quiet' % webrsync_path
     else:
-        cmd = '%s --sync --quiet' % module.emerge_path
+        cmd = '%s --sync --quiet --ask=n' % module.emerge_path
 
     rc, out, err = module.run_command(cmd)
     if rc != 0:
@@ -231,6 +254,8 @@ def emerge_packages(module, packages):
                 break
         else:
             module.exit_json(changed=False, msg='Packages already present.')
+        if module.check_mode:
+            module.exit_json(changed=True, msg='Packages would be installed.')
 
     args = []
     emerge_flags = {
@@ -244,10 +269,16 @@ def emerge_packages(module, packages):
         'onlydeps': '--onlydeps',
         'quiet': '--quiet',
         'verbose': '--verbose',
+        'getbinpkg': '--getbinpkg',
+        'usepkgonly': '--usepkgonly',
+        'usepkg': '--usepkg',
     }
     for flag, arg in emerge_flags.iteritems():
         if p[flag]:
             args.append(arg)
+
+    if p['usepkg'] and p['usepkgonly']:
+        module.fail_json(msg='Use only one of usepkg, usepkgonly')
 
     cmd, (rc, out, err) = run_emerge(module, packages, *args)
     if rc != 0:
@@ -256,16 +287,31 @@ def emerge_packages(module, packages):
             msg='Packages not installed.',
         )
 
+    # Check for SSH error with PORTAGE_BINHOST, since rc is still 0 despite
+    #   this error
+    if (p['usepkgonly'] or p['getbinpkg']) \
+            and 'Permission denied (publickey).' in err:
+        module.fail_json(
+            cmd=cmd, rc=rc, stdout=out, stderr=err,
+            msg='Please check your PORTAGE_BINHOST configuration in make.conf '
+                'and your SSH authorized_keys file',
+        )
+
     changed = True
     for line in out.splitlines():
-        if line.startswith('>>> Emerging (1 of'):
+        if re.match(r'(?:>+) Emerging (?:binary )?\(1 of', line):
+            msg = 'Packages installed.'
+            break
+        elif module.check_mode and re.match(r'\[(binary|ebuild)', line):
+            msg = 'Packages would be installed.'
             break
     else:
         changed = False
+        msg = 'No packages installed.'
 
     module.exit_json(
         changed=changed, cmd=cmd, rc=rc, stdout=out, stderr=err,
-        msg='Packages installed.',
+        msg=msg,
     )
 
 
@@ -355,18 +401,21 @@ def main():
                 default=portage_present_states[0],
                 choices=portage_present_states + portage_absent_states,
             ),
-            update=dict(default=None, choices=['yes']),
-            deep=dict(default=None, choices=['yes']),
-            newuse=dict(default=None, choices=['yes']),
-            changed_use=dict(default=None, choices=['yes']),
-            oneshot=dict(default=None, choices=['yes']),
-            noreplace=dict(default=None, choices=['yes']),
-            nodeps=dict(default=None, choices=['yes']),
-            onlydeps=dict(default=None, choices=['yes']),
-            depclean=dict(default=None, choices=['yes']),
-            quiet=dict(default=None, choices=['yes']),
-            verbose=dict(default=None, choices=['yes']),
+            update=dict(default=False, type='bool'),
+            deep=dict(default=False, type='bool'),
+            newuse=dict(default=False, type='bool'),
+            changed_use=dict(default=False, type='bool'),
+            oneshot=dict(default=False, type='bool'),
+            noreplace=dict(default=False, type='bool'),
+            nodeps=dict(default=False, type='bool'),
+            onlydeps=dict(default=False, type='bool'),
+            depclean=dict(default=False, type='bool'),
+            quiet=dict(default=False, type='bool'),
+            verbose=dict(default=False, type='bool'),
             sync=dict(default=None, choices=['yes', 'web']),
+            getbinpkg=dict(default=False, type='bool'),
+            usepkgonly=dict(default=False, type='bool'),
+            usepkg=dict(default=False, type='bool'),
         ),
         required_one_of=[['package', 'sync', 'depclean']],
         mutually_exclusive=[['nodeps', 'onlydeps'], ['quiet', 'verbose']],
@@ -383,7 +432,9 @@ def main():
         if not p['package']:
             module.exit_json(msg='Sync successfully finished.')
 
-    packages = p['package'].split(',') if p['package'] else []
+    packages = []
+    if p['package']:
+        packages.extend(p['package'].split(','))
 
     if p['depclean']:
         if packages and p['state'] not in portage_absent_states:

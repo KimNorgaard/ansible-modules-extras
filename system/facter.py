@@ -32,7 +32,9 @@ version_added: "0.2"
 options: {}
 notes: []
 requirements: [ "facter", "ruby-json" ]
-author: Michael DeHaan
+author: 
+    - "Ansible Core Team"
+    - "Michael DeHaan"
 '''
 
 EXAMPLES = '''
@@ -45,7 +47,10 @@ def main():
         argument_spec = dict()
     )
 
-    cmd = ["/usr/bin/env", "facter", "--json"]
+    facter_path = module.get_bin_path('facter', opt_dirs=['/opt/puppetlabs/bin'])
+
+    cmd = [facter_path, "--puppet", "--json"]
+
     rc, out, err = module.run_command(cmd, check_rc=True)
     module.exit_json(**json.loads(out))
 

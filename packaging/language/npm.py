@@ -25,7 +25,7 @@ short_description: Manage node.js packages with npm
 description:
   - Manage node.js packages with Node Package Manager (npm)
 version_added: 1.2
-author: Chris Hoffman
+author: "Chris Hoffman (@chrishoffman)"
 options:
   name:
     description:
@@ -107,7 +107,12 @@ import os
 try:
     import json
 except ImportError:
-    import simplejson as json
+    try:
+        import simplejson as json
+    except ImportError:
+        # Let snippet from module_utils/basic.py return a proper error in this case
+        pass
+
 
 class Npm(object):
     def __init__(self, module, **kwargs):
@@ -126,7 +131,7 @@ class Npm(object):
             self.executable = [module.get_bin_path('npm', True)]
 
         if kwargs['version']:
-            self.name_version = self.name + '@' + self.version
+            self.name_version = self.name + '@' + str(self.version)
         else:
             self.name_version = self.name
 
@@ -149,6 +154,7 @@ class Npm(object):
             #If path is specified, cd into that path and run the command.
             cwd = None
             if self.path:
+                self.path = os.path.abspath(os.path.expanduser(self.path))
                 if not os.path.exists(self.path):
                     os.makedirs(self.path)
                 if not os.path.isdir(self.path):
@@ -249,7 +255,7 @@ def main():
         outdated = npm.list_outdated()
         if len(missing) or len(outdated):
             changed = True
-            npm.install()
+            npm.update()
     else: #absent
         installed, missing = npm.list()
         if name in installed:

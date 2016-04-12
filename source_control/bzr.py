@@ -22,7 +22,7 @@
 DOCUMENTATION = u'''
 ---
 module: bzr
-author: André Paramés
+author: "André Paramés (@andreparames)"
 version_added: "1.1"
 short_description: Deploy software (or files) from bzr branches
 description:
@@ -45,11 +45,12 @@ options:
               bzr revno or revid.
     force:
         required: false
-        default: "yes"
+        default: "no"
         choices: [ 'yes', 'no' ]
         description:
             - If C(yes), any modified files in the working
-              tree will be discarded.
+              tree will be discarded.  Before 1.9 the default
+              value was "yes".
     executable:
         required: false
         default: null
@@ -145,7 +146,7 @@ def main():
             dest=dict(required=True),
             name=dict(required=True, aliases=['parent']),
             version=dict(default='head'),
-            force=dict(default='yes', type='bool'),
+            force=dict(default='no', type='bool'),
             executable=dict(default=None),
         )
     )

@@ -81,7 +81,7 @@ requirements: [ mosquitto ]
 notes:
  - This module requires a connection to an MQTT broker such as Mosquitto
    U(http://mosquitto.org) and the I(Paho) C(mqtt) Python client (U(https://pypi.python.org/pypi/paho-mqtt)).
-author: Jan-Piet Mens
+author: "Jan-Piet Mens (@jpmens)" 
 '''
 
 EXAMPLES = '''
@@ -113,14 +113,14 @@ def main():
     module = AnsibleModule(
         argument_spec=dict(
             server = dict(default = 'localhost'),
-            port = dict(default = 1883),
+            port = dict(default = 1883, type='int'),
             topic = dict(required = True),
             payload = dict(required = True),
             client_id = dict(default = None),
             qos = dict(default="0", choices=["0", "1", "2"]),
             retain = dict(default=False, type='bool'),
             username = dict(default = None),
-            password = dict(default = None),
+            password = dict(default = None, no_log=True),
         ),
         supports_check_mode=True
     )

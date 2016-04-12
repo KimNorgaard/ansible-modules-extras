@@ -25,10 +25,10 @@ DOCUMENTATION = '''
 ---
 module: a10_service_group
 version_added: 1.8
-short_description: Manage A10 Networks AX/SoftAX/Thunder/vThunder devices
+short_description: Manage A10 Networks devices' service groups
 description:
     - Manage slb service-group objects on A10 Networks devices via aXAPI
-author: Mischa Peters
+author: "Mischa Peters (@mischapeters)"
 notes:
     - Requires A10 Networks aXAPI 2.1
     - When a server doesn't exist and is added to the service-group the server will be created

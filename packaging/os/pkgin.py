@@ -1,8 +1,10 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# (c) 2013, Shaun Zinck
-# Written by Shaun Zinck <shaun.zinck at gmail.com>
+# Copyright (c) 2013 Shaun Zinck <shaun.zinck at gmail.com>
+# Copyright (c) 2015 Lawrence Leonard Gilbert <larry@L2G.to>
+#
+# Written by Shaun Zinck
 # Based on pacman module written by Afterburn <http://github.com/afterburn>
 #  that was based on apt module written by Matthew Williams <matthew@flowroute.com>
 #
@@ -23,101 +25,180 @@
 DOCUMENTATION = '''
 ---
 module: pkgin
-short_description: Package manager for SmartOS
+short_description: Package manager for SmartOS, NetBSD, et al.
 description:
-    - Manages SmartOS packages
+    - "The standard package manager for SmartOS, but also usable on NetBSD
+      or any OS that uses C(pkgsrc).  (Home: U(http://pkgin.net/))"
 version_added: "1.0"
+author:
+    - "Larry Gilbert (L2G)"
+    - "Shaun Zinck (@szinck)"
+notes:
+    - "Known bug with pkgin < 0.8.0: if a package is removed and another
+      package depends on it, the other package will be silently removed as
+      well.  New to Ansible 1.9: check-mode support."
 options:
     name:
         description:
-            - name of package to install/remove
-        required: true
+            - Name of package to install/remove;
+            - multiple names may be given, separated by commas
+        required: false
+        default: null
     state:
         description:
-            - state of the package
+            - Intended state of the package
         choices: [ 'present', 'absent' ]
         required: false
         default: present
-author: Shaun Zinck
-notes:  []
+    update_cache:
+        description:
+          - Update repository database. Can be run with other steps or on it's own.
+        required: false
+        default: no
+        choices: [ "yes", "no" ]
+        version_added: "2.1"
 '''
 
 EXAMPLES = '''
-# install package foo"
+# install package foo
 - pkgin: name=foo state=present
+
+# Update database and install "foo" package
+- pkgin: name=foo update_cache=yes
 
 # remove package foo
 - pkgin: name=foo state=absent
 
 # remove packages foo and bar
 - pkgin: name=foo,bar state=absent
+
+# Update repositories as a separate step
+- pkgin: update_cache=yes
 '''
 
 
-import json
-import shlex
-import os
-import sys
-import pipes
+import re
 
-def query_package(module, pkgin_path, name, state="present"):
+def query_package(module, pkgin_path, name):
+    """Search for the package by name.
 
-    if state == "present":
+    Possible return values:
+    * "present"  - installed, no upgrade needed
+    * "outdated" - installed, but can be upgraded
+    * False      - not installed or not found
+    """
 
-        rc, out, err = module.run_command("%s -y list | grep ^%s" % (pipes.quote(pkgin_path), pipes.quote(name)), use_unsafe_shell=True)
+    # test whether '-p' (parsable) flag is supported.
+    rc, out, err = module.run_command("%s -p -v" % pkgin_path)
 
-        if rc == 0:
-            # At least one package with a package name that starts with ``name``
-            # is installed.  For some cases this is not sufficient to determine
-            # wether the queried package is installed.
-            #
-            # E.g. for ``name='gcc47'``, ``gcc47`` not being installed, but
-            # ``gcc47-libs`` being installed, ``out`` would be:
-            #
-            #   gcc47-libs-4.7.2nb4  The GNU Compiler Collection (GCC) support shared libraries.
-            #
-            # Multiline output is also possible, for example with the same query
-            # and bot ``gcc47`` and ``gcc47-libs`` being installed:
-            #
-            #   gcc47-libs-4.7.2nb4   The GNU Compiler Collection (GCC) support shared libraries.
-            #   gcc47-4.7.2nb3       The GNU Compiler Collection (GCC) - 4.7 Release Series
+    if rc == 0:
+        pflag = '-p'
+        splitchar = ';'
+    else:
+        pflag = ''
+        splitchar = ' '
 
-            # Loop over lines in ``out``
-            for line in out.split('\n'):
+    # Use "pkgin search" to find the package. The regular expression will
+    # only match on the complete name.
+    rc, out, err = module.run_command("%s %s search \"^%s$\"" % (pkgin_path, pflag, name))
 
-                # Strip description
-                # (results in sth. like 'gcc47-libs-4.7.2nb4')
-                pkgname_with_version = out.split(' ')[0]
+    # rc will not be 0 unless the search was a success
+    if rc == 0:
 
-                # Strip version
-                # (results in sth like 'gcc47-libs')
-                pkgname_without_version = '-'.join(pkgname_with_version.split('-')[:-1])
+        # Search results may contain more than one line (e.g., 'emacs'), so iterate
+        # through each line to see if we have a match.
+        packages = out.split('\n')
 
-                if name == pkgname_without_version:
-                    return True
+        for package in packages:
 
+            # Break up line at spaces.  The first part will be the package with its
+            # version (e.g. 'gcc47-libs-4.7.2nb4'), and the second will be the state
+            # of the package:
+            #     ''  - not installed
+            #     '<' - installed but out of date
+            #     '=' - installed and up to date
+            #     '>' - installed but newer than the repository version
+            pkgname_with_version, raw_state = package.split(splitchar)[0:2]
+
+            # Search for package, stripping version
+            # (results in sth like 'gcc47-libs' or 'emacs24-nox11')
+            pkg_search_obj = re.search(r'^([a-zA-Z]+[0-9]*[\-]*\w*)-[0-9]', pkgname_with_version, re.M)
+
+            # Do not proceed unless we have a match
+            if not pkg_search_obj:
+                continue
+
+            # Grab matched string
+            pkgname_without_version = pkg_search_obj.group(1)
+
+            if name != pkgname_without_version:
+                continue
+
+            # The package was found; now return its state
+            if raw_state == '<':
+                return 'outdated'
+            elif raw_state == '=' or raw_state == '>':
+                return 'present'
+            else:
+                return False
+            # no fall-through
+
+        # No packages were matched, so return False
         return False
+
+
+def format_action_message(module, action, count):
+    vars = { "actioned": action,
+             "count":    count }
+
+    if module.check_mode:
+        message = "would have %(actioned)s %(count)d package" % vars
+    else:
+        message = "%(actioned)s %(count)d package" % vars
+
+    if count == 1:
+        return message
+    else:
+        return message + "s"
+
+
+def format_pkgin_command(module, pkgin_path, command, package=None):
+    # Not all commands take a package argument, so cover this up by passing
+    # an empty string. Some commands (e.g. 'update') will ignore extra
+    # arguments, however this behaviour cannot be relied on for others.
+    if package is None:
+        package = ""
+
+    vars = { "pkgin":   pkgin_path,
+             "command": command,
+             "package": package }
+
+    if module.check_mode:
+        return "%(pkgin)s -n %(command)s %(package)s" % vars
+    else:
+        return "%(pkgin)s -y %(command)s %(package)s" % vars
 
 
 def remove_packages(module, pkgin_path, packages):
 
     remove_c = 0
+
     # Using a for loop incase of error, we can report the package that failed
     for package in packages:
         # Query the package first, to see if we even need to remove
         if not query_package(module, pkgin_path, package):
             continue
 
-        rc, out, err = module.run_command("%s -y remove %s" % (pkgin_path, package))
+        rc, out, err = module.run_command(
+            format_pkgin_command(module, pkgin_path, "remove", package))
 
-        if query_package(module, pkgin_path, package):
+        if not module.check_mode and query_package(module, pkgin_path, package):
             module.fail_json(msg="failed to remove %s: %s" % (package, out))
 
         remove_c += 1
 
     if remove_c > 0:
-
-        module.exit_json(changed=True, msg="removed %s package(s)" % remove_c)
+        module.exit_json(changed=True, msg=format_action_message(module, "removed", remove_c))
 
     module.exit_json(changed=False, msg="package(s) already absent")
 
@@ -130,31 +211,48 @@ def install_packages(module, pkgin_path, packages):
         if query_package(module, pkgin_path, package):
             continue
 
-        rc, out, err = module.run_command("%s -y install %s" % (pkgin_path, package))
+        rc, out, err = module.run_command(
+            format_pkgin_command(module, pkgin_path, "install", package))
 
-        if not query_package(module, pkgin_path, package):
+        if not module.check_mode and not query_package(module, pkgin_path, package):
             module.fail_json(msg="failed to install %s: %s" % (package, out))
 
         install_c += 1
 
     if install_c > 0:
-        module.exit_json(changed=True, msg="present %s package(s)" % (install_c))
+        module.exit_json(changed=True, msg=format_action_message(module, "installed", install_c))
 
     module.exit_json(changed=False, msg="package(s) already present")
 
+def update_package_db(module, pkgin_path):
+    rc, out, err = module.run_command(
+        format_pkgin_command(module, pkgin_path, "update"))
+
+    if rc == 0:
+        return True
+    else:
+        module.fail_json(msg="could not update package db")
 
 
 def main():
     module = AnsibleModule(
             argument_spec    = dict(
                 state        = dict(default="present", choices=["present","absent"]),
-                name         = dict(aliases=["pkg"], required=True)))
+                name         = dict(aliases=["pkg"], type='list'),
+                update_cache = dict(default='no', type='bool')),
+            required_one_of = [['name', 'update_cache']],
+            supports_check_mode = True)
 
     pkgin_path = module.get_bin_path('pkgin', True, ['/opt/local/bin'])
 
     p = module.params
 
-    pkgs = p["name"].split(",")
+    pkgs = p["name"]
+
+    if p["update_cache"]:
+        update_package_db(module, pkgin_path)
+        if not p['name']:
+            module.exit_json(changed=True, msg='updated repository database')
 
     if p["state"] == "present":
         install_packages(module, pkgin_path, pkgs)
@@ -165,4 +263,5 @@ def main():
 # import module snippets
 from ansible.module_utils.basic import *
 
-main()
+if __name__ == '__main__':
+    main()

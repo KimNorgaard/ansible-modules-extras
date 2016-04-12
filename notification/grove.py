@@ -1,5 +1,20 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+#
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
 DOCUMENTATION = '''
 ---
@@ -25,11 +40,11 @@ options:
     required: true
   url:
     description:
-      - Service URL for the web client 
+      - Service URL for the web client
     required: false
   icon_url:
     description:
-      -  Icon for the service 
+      -  Icon for the service
     required: false
   validate_certs:
     description:
@@ -39,7 +54,7 @@ options:
     default: 'yes'
     choices: ['yes', 'no']
     version_added: 1.5.1
-author: Jonas Pfenniger <zimbatm@zimbatm.com>
+author: "Jonas Pfenniger (@zimbatm)"
 '''
 
 EXAMPLES = '''
@@ -48,6 +63,8 @@ EXAMPLES = '''
     service=my-app
     message=deployed {{ target }}
 '''
+
+import urllib
 
 BASE_URL = 'https://grove.io/api/notice/%s/'
 

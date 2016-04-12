@@ -99,7 +99,7 @@ options:
 notes:
   - "Currently this only works with basic-auth."
 
-author: Steve Smith
+author: "Steve Smith (@tarka)"
 """
 
 EXAMPLES = """
@@ -160,7 +160,15 @@ EXAMPLES = """
         issue={{issue.meta.key}} operation=transition status="Done"
 """
 
-import json
+try:
+    import json
+except ImportError:
+    try:
+        import simplejson as json
+    except ImportError:
+        # Let snippet from module_utils/basic.py return a proper error in this case
+        pass
+
 import base64
 
 def request(url, user, passwd, data=None, method=None):
@@ -335,7 +343,7 @@ def main():
 
         ret = method(restbase, user, passwd, module.params)
 
-    except Exception as e:
+    except Exception, e:
         return module.fail_json(msg=e.message)
 
 

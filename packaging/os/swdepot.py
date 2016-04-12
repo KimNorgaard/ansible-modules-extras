@@ -29,7 +29,7 @@ description:
     - Will install, upgrade and remove packages with swdepot package manager (HP-UX)
 version_added: "1.4"
 notes: []
-author: Raul Melo
+author: "Raul Melo (@melodous)"
 options:
     name:
         description:
@@ -147,7 +147,7 @@ def main():
 
         if not rc:
             changed = True
-            msg = "Packaged installed"
+            msg = "Package installed"
 
         else:
             module.fail_json(name=name, msg=output, rc=rc)

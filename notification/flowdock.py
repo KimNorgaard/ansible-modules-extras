@@ -22,7 +22,7 @@ DOCUMENTATION = '''
 ---
 module: flowdock
 version_added: "1.2"
-author: Matt Coddington
+author: "Matt Coddington (@mcodd)" 
 short_description: Send a message to a flowdock
 description:
    - Send a message to a flowdock team inbox or chat using the push API (see https://www.flowdock.com/api/team-inbox and https://www.flowdock.com/api/chat)
@@ -85,8 +85,7 @@ options:
     choices: ['yes', 'no']
     version_added: 1.5.1
 
-# informational: requirements for nodes
-requirements: [ urllib, urllib2 ]
+requirements: [ ]
 '''
 
 EXAMPLES = '''
@@ -104,6 +103,8 @@ EXAMPLES = '''
             tags=tag1,tag2,tag3
 '''
 
+import urllib
+
 # ===========================================
 # Module execution.
 #
@@ -112,7 +113,7 @@ def main():
 
     module = AnsibleModule(
         argument_spec=dict(
-            token=dict(required=True),
+            token=dict(required=True, no_log=True),
             msg=dict(required=True),
             type=dict(required=True, choices=["inbox","chat"]),
             external_user_name=dict(required=False),

@@ -25,7 +25,7 @@ short_description: "Collect facts from F5 BIG-IP devices"
 description:
     - "Collect facts from F5 BIG-IP devices via iControl SOAP API"
 version_added: "1.6"
-author: Matt Hite
+author: "Matt Hite (@mhite)" 
 notes:
     - "Requires BIG-IP software version >= 11.4"
     - "F5 developed module 'bigsuds' required (see http://devcentral.f5.com)"
@@ -56,6 +56,15 @@ options:
         default: null
         choices: []
         aliases: []
+    validate_certs:
+        description:
+            - If C(no), SSL certificates will not be validated. This should only be used
+              on personally controlled sites.  Prior to 2.0, this module would always
+              validate on python >= 2.7.9 and never validate on python <= 2.7.8
+        required: false
+        default: 'yes'
+        choices: ['yes', 'no']
+        version_added: 2.0
     session:
         description:
             - BIG-IP session support; may be useful to avoid concurrency
@@ -70,8 +79,8 @@ options:
         required: true
         default: null
         choices: ['address_class', 'certificate', 'client_ssl_profile',
-                  'device_group', 'interface', 'key', 'node', 'pool', 'rule',
-                  'self_ip', 'software', 'system_info', 'traffic_group',
+                  'device', 'device_group', 'interface', 'key', 'node', 'pool',
+                  'rule', 'self_ip', 'software', 'system_info', 'traffic_group',
                   'trunk', 'virtual_address', 'virtual_server', 'vlan']
         aliases: []
     filter:
@@ -105,7 +114,7 @@ EXAMPLES = '''
 
 try:
     import bigsuds
-    from suds import MethodNotFound
+    from suds import MethodNotFound, WebFault
 except ImportError:
     bigsuds_found = False
 else:
@@ -128,8 +137,8 @@ class F5(object):
         api: iControl API instance.
     """
 
-    def __init__(self, host, user, password, session=False):
-        self.api = bigsuds.BIGIP(hostname=host, username=user, password=password)
+    def __init__(self, host, user, password, session=False, validate_certs=True):
+        self.api = bigip_api(host, user, password, validate_certs)
         if session:
             self.start_session()
 
@@ -1364,7 +1373,7 @@ def generate_dict(api_obj, fields):
         for field in fields:
             try:
                 api_response = getattr(api_obj, "get_" + field)()
-            except MethodNotFound:
+            except (MethodNotFound, WebFault):
                 pass
             else:
                 lists.append(api_response)
@@ -1380,7 +1389,7 @@ def generate_simple_dict(api_obj, fields):
     for field in fields:
         try:
             api_response = getattr(api_obj, "get_" + field)()
-        except MethodNotFound:
+        except (MethodNotFound, WebFault):
             pass
         else:
             result_dict[field] = api_response
@@ -1573,6 +1582,7 @@ def main():
             server = dict(type='str', required=True),
             user = dict(type='str', required=True),
             password = dict(type='str', required=True),
+            validate_certs = dict(default='yes', type='bool'),
             session = dict(type='bool', default=False),
             include = dict(type='list', required=True),
             filter = dict(type='str', required=False),
@@ -1580,21 +1590,28 @@ def main():
     )
 
     if not bigsuds_found:
-        module.fail_json(msg="the python suds and bigsuds modules is required")
+        module.fail_json(msg="the python suds and bigsuds modules are required")
 
     server = module.params['server']
     user = module.params['user']
     password = module.params['password']
+    validate_certs = module.params['validate_certs']
     session = module.params['session']
     fact_filter = module.params['filter']
+
+    if validate_certs:
+        import ssl
+        if not hasattr(ssl, 'SSLContext'):
+            module.fail_json(msg='bigsuds does not support verifying certificates with python < 2.7.9.  Either update python or set validate_certs=False on the task')
+
     if fact_filter:
         regex = fnmatch.translate(fact_filter)
     else:
         regex = None
     include = map(lambda x: x.lower(), module.params['include'])
     valid_includes = ('address_class', 'certificate', 'client_ssl_profile',
-                      'device_group', 'interface', 'key', 'node', 'pool',
-                      'rule', 'self_ip', 'software', 'system_info',
+                      'device', 'device_group', 'interface', 'key', 'node',
+                      'pool', 'rule', 'self_ip', 'software', 'system_info',
                       'traffic_group', 'trunk', 'virtual_address',
                       'virtual_server', 'vlan')
     include_test = map(lambda x: x in valid_includes, include)
@@ -1605,7 +1622,7 @@ def main():
         facts = {}
 
         if len(include) > 0:
-            f5 = F5(server, user, password, session)
+            f5 = F5(server, user, password, session, validate_certs)
             saved_active_folder = f5.get_active_folder()
             saved_recursive_query_state = f5.get_recursive_query_state()
             if saved_active_folder != "/":
@@ -1665,6 +1682,9 @@ def main():
     module.exit_json(**result)
 
 # include magic from lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
-main()
+from ansible.module_utils.basic import *
+from ansible.module_utils.f5 import *
+
+if __name__ == '__main__':
+    main()
 

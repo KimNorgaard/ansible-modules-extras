@@ -3,6 +3,7 @@
 
 # (c) 2013, Andrew Dunham <andrew@du.nham.ca>
 # (c) 2013, Daniel Jaouen <dcj24@cornell.edu>
+# (c) 2015, Indrajit Raychaudhuri <irc+code@indrajit.com>
 #
 # Based on macports (Jimmy Tang <jcftang@gmail.com>)
 #
@@ -22,7 +23,10 @@
 DOCUMENTATION = '''
 ---
 module: homebrew
-author: Andrew Dunham and Daniel Jaouen
+author:
+    - "Indrajit Raychaudhuri (@indrajitr)"
+    - "Daniel Jaouen (@danieljaouen)"
+    - "Andrew Dunham (@andrew-d)"
 short_description: Package manager for Homebrew
 description:
     - Manages Homebrew packages
@@ -31,7 +35,13 @@ options:
     name:
         description:
             - name of package to install/remove
-        required: true
+        required: false
+        default: None
+    path:
+        description:
+            - "':' separated list of paths to search for 'brew' executable. Since A package (I(formula) in homebrew parlance) location is prefixed relative to the actual path of I(brew) command, providing an alternative I(brew) path enables managing different set of packages in an alternative location in the system."
+        required: false
+        default: '/usr/local/bin'
     state:
         description:
             - state of the package
@@ -42,7 +52,7 @@ options:
         description:
             - update homebrew itself first
         required: false
-        default: "no"
+        default: no
         choices: [ "yes", "no" ]
     upgrade_all:
         description:
@@ -59,10 +69,22 @@ options:
 notes:  []
 '''
 EXAMPLES = '''
+# Install formula foo with 'brew' in default path (C(/usr/local/bin))
 - homebrew: name=foo state=present
+
+# Install formula foo with 'brew' in alternate path C(/my/other/location/bin)
+- homebrew: name=foo path=/my/other/location/bin state=present
+
+# Update homebrew first and install formula foo with 'brew' in default path
 - homebrew: name=foo state=present update_homebrew=yes
+
+# Update homebrew first and upgrade formula foo to latest available with 'brew' in default path
 - homebrew: name=foo state=latest update_homebrew=yes
+
+# Update homebrew and upgrade all packages
 - homebrew: update_homebrew=yes upgrade_all=yes
+
+# Miscellaneous other examples
 - homebrew: name=foo state=head
 - homebrew: name=foo state=linked
 - homebrew: name=foo state=absent
@@ -113,8 +135,10 @@ class Homebrew(object):
     VALID_PACKAGE_CHARS = r'''
         \w                  # alphanumeric characters (i.e., [a-zA-Z0-9_])
         .                   # dots
+        /                   # slash (for taps)
         \+                  # plusses
         -                   # dashes
+        :                   # colons (for URLs)
     '''
 
     INVALID_PATH_REGEX        = _create_regex_group(VALID_PATH_CHARS)
@@ -296,7 +320,7 @@ class Homebrew(object):
             return package
     # /class properties -------------------------------------------- }}}
 
-    def __init__(self, module, path=None, packages=None, state=None,
+    def __init__(self, module, path, packages=None, state=None,
                  update_homebrew=False, upgrade_all=False,
                  install_options=None):
         if not install_options:
@@ -322,12 +346,7 @@ class Homebrew(object):
             setattr(self, key, val)
 
     def _prep(self):
-        self._prep_path()
         self._prep_brew_path()
-
-    def _prep_path(self):
-        if not self.path:
-            self.path = ['/usr/local/bin']
 
     def _prep_brew_path(self):
         if not self.module:
@@ -390,18 +409,17 @@ class Homebrew(object):
 
         return False
 
-    def _outdated_packages(self):
-        rc, out, err = self.module.run_command([
-            self.brew_path,
-            'outdated',
-        ])
-        return [line.split(' ')[0].strip() for line in out.split('\n') if line]
-
     def _current_package_is_outdated(self):
         if not self.valid_package(self.current_package):
             return False
 
-        return self.current_package in self._outdated_packages()
+        rc, out, err = self.module.run_command([
+            self.brew_path,
+            'outdated',
+            self.current_package,
+        ])
+
+        return rc != 0
 
     def _current_package_is_installed_from_head(self):
         if not Homebrew.valid_package(self.current_package):
@@ -759,8 +777,15 @@ class Homebrew(object):
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            name=dict(aliases=["pkg"], required=False),
-            path=dict(required=False),
+            name=dict(
+                aliases=["pkg", "package", "formula"],
+                required=False,
+                type='list',
+            ),
+            path=dict(
+                default="/usr/local/bin",
+                required=False,
+            ),
             state=dict(
                 default="present",
                 choices=[
@@ -771,12 +796,12 @@ def main():
                 ],
             ),
             update_homebrew=dict(
-                default="no",
+                default=False,
                 aliases=["update-brew"],
                 type='bool',
             ),
             upgrade_all=dict(
-                default="no",
+                default=False,
                 aliases=["upgrade"],
                 type='bool',
             ),
@@ -791,15 +816,13 @@ def main():
     p = module.params
 
     if p['name']:
-        packages = p['name'].split(',')
+        packages = p['name']
     else:
         packages = None
 
     path = p['path']
     if path:
         path = path.split(':')
-    else:
-        path = ['/usr/local/bin']
 
     state = p['state']
     if state in ('present', 'installed'):
@@ -831,5 +854,7 @@ def main():
         module.exit_json(changed=changed, msg=message)
 
 # this is magic, see lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
-main()
+from ansible.module_utils.basic import *
+
+if __name__ == '__main__':
+    main()

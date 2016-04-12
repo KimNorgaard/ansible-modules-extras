@@ -5,6 +5,22 @@
 #
 # This module is proudly sponsored by iGeolise (www.igeolise.com) and
 # Tiny Lab Productions (www.tinylabproductions.com).
+#
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+
 
 DOCUMENTATION = '''
 ---
@@ -14,9 +30,9 @@ description:
 - "Allows to post events to DataDog (www.datadoghq.com) service."
 - "Uses http://docs.datadoghq.com/api/#events API."
 version_added: "1.3"
-author: Artūras 'arturaz' Šlajus <x11@arturaz.net>
+author: "Artūras `arturaz` Šlajus (@arturaz)"
 notes: []
-requirements: [urllib2]
+requirements: []
 options:
     api_key:
         description: ["Your DataDog API key."]
@@ -71,7 +87,7 @@ datadog_event: title="Testing from ansible" text="Test!" priority="low"
 # Post an event with several tags
 datadog_event: title="Testing from ansible" text="Test!"
                api_key="6873258723457823548234234234"
-               tags=aa,bb,cc
+               tags=aa,bb,#host:{{ inventory_hostname }}
 '''
 
 import socket
@@ -86,7 +102,7 @@ def main():
             priority=dict(
                 required=False, default='normal', choices=['normal', 'low']
             ),
-            tags=dict(required=False, default=None),
+            tags=dict(required=False, default=None, type='list'),
             alert_type=dict(
                 required=False, default='info',
                 choices=['error', 'warning', 'info', 'success']
@@ -116,7 +132,7 @@ def post_event(module):
     if module.params['date_happened'] != None:
         body['date_happened'] = module.params['date_happened']
     if module.params['tags'] != None:
-        body['tags'] = module.params['tags'].split(",")
+        body['tags'] = module.params['tags']
     if module.params['aggregation_key'] != None:
         body['aggregation_key'] = module.params['aggregation_key']
     if module.params['source_type_name'] != None:
@@ -139,5 +155,5 @@ def post_event(module):
 # import module snippets
 from ansible.module_utils.basic import *
 from ansible.module_utils.urls import *
-
-main()
+if __name__ == '__main__':
+    main()
