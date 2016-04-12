@@ -1,5 +1,22 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+#
+# (c) 2016, Kim Nørgaard <jasen@jasen.dk>
+#
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible. If not, see <http://www.gnu.org/licenses/>.
 
 import json
 import requests
@@ -7,7 +24,7 @@ import requests
 DOCUMENTATION = """
 ---
 module: steelapp_node
-version_added: 1.8.2
+version_added: 2.1
 short_description: manage nodes in steelapp traffic managers
 description:
     - Manage nodes in a SteelApp Traffic Managers
@@ -70,7 +87,7 @@ options:
         default: null
 """
 
-EXMPLES="""
+EXAMPLES="""
 # Add a node to a pool
 - name: Add node to pool
   steelapp_node:
@@ -123,6 +140,14 @@ EXMPLES="""
     user: myuser
     password: mypassword
   register: pool
+"""
+
+RETURN="""
+data:
+    description: Information about the node
+    returned: success
+    type: dict
+    sample: depends on the method used
 """
 
 class SteelAppNode(object):

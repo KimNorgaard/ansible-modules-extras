@@ -1,5 +1,22 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+#
+# (c) 2016, Kim Nørgaard <jasen@jasen.dk>
+#
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible. If not, see <http://www.gnu.org/licenses/>.
 
 import json
 import requests
@@ -7,7 +24,7 @@ import requests
 DOCUMENTATION = """
 ---
 module: steelapp_pool
-version_added: 1.8.2
+version_added: 2.1
 short_description: manage steelapp pools
 description:
     - Manage pools in a SteelApp Traffic Manager
@@ -56,7 +73,7 @@ options:
         required: true
         default: null
 """
-EXMPLES="""
+EXAMPLES="""
 # Create a pool
 - name: Create pool
   steelapp_pool:
@@ -86,6 +103,14 @@ EXMPLES="""
     server: myserver.mydomain.com
     user: myuser
     password: mypassword
+"""
+
+RETURN="""
+data:
+    description: Information about the pool
+    returned: success
+    type: dict
+    sample: depends on the method used
 """
 
 class SteelAppPool(object):
